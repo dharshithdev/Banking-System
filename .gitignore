@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Environment files (use .env.example as a template)
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist/
+build/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Misc
+coverage/
+graphify-out/
