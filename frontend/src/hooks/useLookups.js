@@ -8,9 +8,11 @@ import { customersApi, accountsApi } from '../api';
 export function useLookups() {
   const [state, setState] = useState({ customers: [], accounts: [] });
   const [version, setVersion] = useState(0);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
+    setError(null);
     Promise.all([
       customersApi.list({ page: 1, limit: 100 }),
       accountsApi.list({ page: 1, limit: 100 })
@@ -18,7 +20,9 @@ export function useLookups() {
       .then(([c, a]) => {
         if (!cancelled) setState({ customers: c.data, accounts: a.data });
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (!cancelled) setError(err.message || 'Unable to load customer and account options.');
+      });
     return () => {
       cancelled = true;
     };
@@ -34,5 +38,5 @@ export function useLookups() {
   );
   const reload = useCallback(() => setVersion((v) => v + 1), []);
 
-  return { ...state, customerMap, accountMap, reload };
+  return { ...state, customerMap, accountMap, reload, error };
 }
