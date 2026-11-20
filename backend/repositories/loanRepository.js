@@ -1,48 +1,18 @@
 const Loan = require('../models/Loan');
 const { nextSequence } = require('../models/Counter');
 const { isValidId, serialize, paginate } = require('../utils/db');
-
 const loanRepository = {
-  async findAll({ page = 1, limit = 5 } = {}) {
-    return paginate(Loan, {}, { appliedAt: 1, _id: 1 }, { page, limit }, 5);
-  },
-
-  async findById(id) {
-    if (!isValidId(id)) return null;
-    return serialize(await Loan.findById(id).lean());
-  },
-
-  async findByCustomerId(customerId) {
-    if (!isValidId(customerId)) return [];
-    return serialize(await Loan.find({ customerId }).sort({ appliedAt: 1 }).lean());
-  },
-
-  async create(loanData) {
+  async findAll(query) { return paginate(Loan, {}, { appliedAt: 1, _id: 1 }, query || {}, 5); },
+  async findById(id) { if (!isValidId(id)) return null; return serialize(await Loan.findById(id).lean()); },
+  async findByCustomerId(id) { if (!isValidId(id)) return []; return serialize(await Loan.find({ customerId: id }).sort({ appliedAt: 1 }).lean()); },
+  async create(data) {
     const seq = await nextSequence('loan');
-    const loan = await Loan.create({
-      customerId: loanData.customerId,
-      accountId: isValidId(loanData.accountId) ? loanData.accountId : null,
-      type: loanData.type,
-      principal: loanData.principal,
-      interestRate: loanData.interestRate,
-      tenureMonths: loanData.tenureMonths,
-      loanNumber: `LN${String(seq).padStart(6, '0')}`,
-      status: 'Pending',
-      emi: null,
-      outstanding: loanData.principal,
-      approvedAt: null
-    });
-    return serialize(loan.toObject());
+    const doc = await Loan.create({ customerId: data.customerId, accountId: data.accountId || null, type: data.type, principal: data.principal, interestRate: data.interestRate, tenureMonths: data.tenureMonths, loanNumber: `LN${String(seq).padStart(6, '0')}`, status: 'Pending', emi: null, outstanding: data.principal, approvedAt: null });
+    return serialize(doc.toObject());
   },
-
-  async update(id, updates) {
+  async approvePending(id, emi) {
     if (!isValidId(id)) return null;
-    const loan = await Loan.findByIdAndUpdate(id, updates, {
-      new: true,
-      runValidators: true
-    }).lean();
-    return serialize(loan);
+    return serialize(await Loan.findOneAndUpdate({ _id: id, status: 'Pending' }, { $set: { status: 'Approved', emi, approvedAt: new Date() } }, { new: true, runValidators: true }).lean());
   }
 };
-
 module.exports = loanRepository;

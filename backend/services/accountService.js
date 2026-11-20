@@ -1,70 +1,34 @@
 const accountRepository = require('../repositories/accountRepository');
 const transactionRepository = require('../repositories/transactionRepository');
 const customerRepository = require('../repositories/customerRepository');
-
+const { AppError } = require('../middleware/errorHandler');
 const accountService = {
-  async getAllAccounts(query) {
-    return accountRepository.findAll(query);
-  },
-
-  async getAccountById(id) {
-    const account = await accountRepository.findById(id);
-    if (!account) {
-      throw new Error('Account not found');
-    }
-    return account;
-  },
-
-  async getAccountsByCustomer(customerId) {
-    return accountRepository.findByCustomerId(customerId);
-  },
-
+  async getAllAccounts(query) { return accountRepository.findAll(query); },
+  async getAccountById(id) { const account = await accountRepository.findById(id); if (!account) throw new AppError('Account not found', 404); return account; },
+  async getAccountsByCustomer(id) { return accountRepository.findByCustomerId(id); },
   async openAccount(data) {
-    const customer = await customerRepository.findById(data.customerId);
-    if (!customer) {
-      throw new Error('Customer not found');
-    }
-    if (!data.type || !['Savings', 'Current', 'Fixed Deposit'].includes(data.type)) {
-      throw new Error('Invalid account type');
-    }
+    if (!await customerRepository.findById(data.customerId)) throw new AppError('Customer not found', 404);
     return accountRepository.create(data);
   },
-
-  async deposit(accountId, amount, description = 'Deposit') {
-    if (amount <= 0) {
-      throw new Error('Amount must be positive');
-    }
-    const account = await accountRepository.findById(accountId);
-    if (!account) {
-      throw new Error('Account not found');
-    }
-    if (account.status !== 'Active') {
-      throw new Error('Account is not active');
-    }
-
-    // CRITICAL BUG: balance is calculated correctly but NEVER saved.
-    // Transaction is created with the correct intended balanceAfter,
-    // so UI looks successful, but actual account balance stays the same.
-    const newBalance = account.balance + amount;
-
-    // BUG: missing call to accountRepository.updateBalance(accountId, newBalance);
-
-    const tx = await transactionRepository.create({
-      accountId,
-      type: 'Credit',
-      amount,
-      description,
-      balanceAfter: newBalance
-    });
-
-    // Returns stale account (old balance)
-    return { account, transaction: tx };
+  async deposit(id, amount, description = 'Deposit') {
+    validateAmount(amount);
+    const account = await accountRepository.incrementActiveBalance(id, amount);
+    if (!account) throw await unavailableError(id);
+    const transaction = await transactionRepository.create({ accountId: id, type: 'Credit', amount, description, balanceAfter: account.balance });
+    return { account, transaction };
   },
-
-  // withdraw intentionally not implemented (one of the 3 missing features)
-  async withdraw(accountId, amount, description = 'Withdrawal') {
-    throw new Error('Withdraw functionality not implemented');
+  async withdraw(id, amount, description = 'Withdrawal') {
+    validateAmount(amount);
+    const account = await accountRepository.decrementActiveBalance(id, amount);
+    if (!account) {
+      const existing = await accountRepository.findById(id);
+      if (!existing || existing.status !== 'Active') throw new AppError('Account not found or inactive', existing ? 400 : 404);
+      throw new AppError('Insufficient balance', 400);
+    }
+    const transaction = await transactionRepository.create({ accountId: id, type: 'Debit', amount, description, balanceAfter: account.balance });
+    return { account, transaction };
   }
 };
-
+function validateAmount(amount) { if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) throw new AppError('Amount must be a finite number greater than 0', 400); }
+async function unavailableError(id) { const account = await accountRepository.findById(id); return new AppError(!account ? 'Account not found' : 'Account is not active', account ? 400 : 404); }
 module.exports = accountService;

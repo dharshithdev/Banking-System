@@ -1,40 +1,26 @@
 const customerRepository = require('../repositories/customerRepository');
 const accountRepository = require('../repositories/accountRepository');
 const loanRepository = require('../repositories/loanRepository');
-
+const { AppError } = require('../middleware/errorHandler');
 const customerService = {
-  async getAllCustomers(query) {
-    return customerRepository.findAll(query);
-  },
-
+  async getAllCustomers(query) { return customerRepository.findAll(query); },
   async getCustomerById(id) {
     const customer = await customerRepository.findById(id);
-    if (!customer) {
-      throw new Error('Customer not found');
-    }
-    const [accounts, loans] = await Promise.all([
-      accountRepository.findByCustomerId(id),
-      loanRepository.findByCustomerId(id)
-    ]);
+    if (!customer) throw new AppError('Customer not found', 404);
+    const [accounts, loans] = await Promise.all([accountRepository.findByCustomerId(id), loanRepository.findByCustomerId(id)]);
     return { ...customer, accounts, loans };
   },
-
-  async createCustomer(data) {
-    if (!data.name || !data.email || !data.phone) {
-      throw new Error('Name, email and phone are required');
-    }
-    return customerRepository.create(data);
-  },
-
+  async createCustomer(data) { return customerRepository.create(data); },
   async updateCustomer(id, data) {
-    const existing = await customerRepository.findById(id);
-    if (!existing) {
-      throw new Error('Customer not found');
-    }
+    if (!await customerRepository.findById(id)) throw new AppError('Customer not found', 404);
     return customerRepository.update(id, data);
+  },
+  async deleteCustomer(id) {
+    if (!await customerRepository.findById(id)) throw new AppError('Customer not found', 404);
+    const [accounts, loans] = await Promise.all([accountRepository.findByCustomerId(id), loanRepository.findByCustomerId(id)]);
+    if (accounts.length || loans.length) throw new AppError(`Customer cannot be deleted because ${accounts.length} account(s) and ${loans.length} loan(s) are linked to this customer.`, 409);
+    await customerRepository.deleteById(id);
+    return { message: 'Customer deleted successfully' };
   }
-
-  // deleteCustomer intentionally missing
 };
-
 module.exports = customerService;

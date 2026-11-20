@@ -1,29 +1,6 @@
-const transactionService = require('../services/transactionService');
-
+const service = require('../services/transactionService');
 const transactionController = {
-  async getAll(req, res) {
-    try {
-      const result = await transactionService.getAllTransactions({
-        page: req.query.page || 1,
-        limit: req.query.limit || 10
-      });
-      res.json(result);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  },
-
-  async getByAccount(req, res) {
-    try {
-      const result = await transactionService.getTransactionsByAccount(req.params.accountId, {
-        page: req.query.page || 1,
-        limit: req.query.limit || 10
-      });
-      res.json(result);
-    } catch (err) {
-      res.status(404).json({ error: err.message });
-    }
-  }
+  async getAll(req, res, next) { try { res.json(await service.getAllTransactions({ page: req.query.page || 1, limit: req.query.limit || 10 })); } catch (e) { next(e); } },
+  async getByAccount(req, res, next) { try { res.json(await service.getTransactionsByAccount(req.params.accountId, { page: req.query.page || 1, limit: req.query.limit || 10 })); } catch (e) { next(e); } }
 };
-
 module.exports = transactionController;

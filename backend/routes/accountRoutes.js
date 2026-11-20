@@ -1,12 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const accountController = require('../controllers/accountController');
-
-router.get('/', accountController.getAll);
-router.get('/:id', accountController.getById);
-router.get('/customer/:customerId', accountController.getByCustomer);
-router.post('/', accountController.open);
-router.post('/:id/deposit', accountController.deposit);
-router.post('/:id/withdraw', accountController.withdraw);
-
+const controller = require('../controllers/accountController');
+const v = require('../middleware/validate');
+router.get('/', v.pagination, controller.getAll);
+router.get('/customer/:customerId', v.objectId('customerId'), controller.getByCustomer);
+router.get('/:id', v.objectId('id'), controller.getById);
+router.post('/', v.account, controller.open);
+router.post('/:id/deposit', v.objectId('id'), v.amount, controller.deposit);
+router.post('/:id/withdraw', v.objectId('id'), v.amount, controller.withdraw);
 module.exports = router;

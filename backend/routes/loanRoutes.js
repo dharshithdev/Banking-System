@@ -1,11 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const loanController = require('../controllers/loanController');
-
-router.get('/', loanController.getAll);
-router.get('/:id', loanController.getById);
-router.get('/customer/:customerId', loanController.getByCustomer);
-router.post('/', loanController.apply);
-router.post('/:id/approve', loanController.approve);
-
+const controller = require('../controllers/loanController');
+const v = require('../middleware/validate');
+router.get('/', v.pagination, controller.getAll);
+router.get('/customer/:customerId', v.objectId('customerId'), controller.getByCustomer);
+router.get('/:id', v.objectId('id'), controller.getById);
+router.post('/', v.loan, controller.apply);
+router.post('/:id/approve', v.objectId('id'), controller.approve);
 module.exports = router;

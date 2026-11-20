@@ -1,53 +1,9 @@
-const loanService = require('../services/loanService');
-
+const service = require('../services/loanService');
 const loanController = {
-  async getAll(req, res) {
-    try {
-      const result = await loanService.getAllLoans({
-        page: req.query.page || 1,
-        limit: req.query.limit || 5
-      });
-      res.json(result);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  },
-
-  async getById(req, res) {
-    try {
-      const loan = await loanService.getLoanById(req.params.id);
-      res.json(loan);
-    } catch (err) {
-      res.status(404).json({ error: err.message });
-    }
-  },
-
-  async getByCustomer(req, res) {
-    try {
-      const loans = await loanService.getLoansByCustomer(req.params.customerId);
-      res.json(loans);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  },
-
-  async apply(req, res) {
-    try {
-      const loan = await loanService.applyForLoan(req.body);
-      res.status(201).json(loan);
-    } catch (err) {
-      res.status(400).json({ error: err.message });
-    }
-  },
-
-  async approve(req, res) {
-    try {
-      const loan = await loanService.approveLoan(req.params.id);
-      res.json(loan);
-    } catch (err) {
-      res.status(400).json({ error: err.message });
-    }
-  }
+  async getAll(req, res, next) { try { res.json(await service.getAllLoans({ page: req.query.page || 1, limit: req.query.limit || 5 })); } catch (e) { next(e); } },
+  async getById(req, res, next) { try { res.json(await service.getLoanById(req.params.id)); } catch (e) { next(e); } },
+  async getByCustomer(req, res, next) { try { res.json(await service.getLoansByCustomer(req.params.customerId)); } catch (e) { next(e); } },
+  async apply(req, res, next) { try { res.status(201).json(await service.applyForLoan(req.body)); } catch (e) { next(e); } },
+  async approve(req, res, next) { try { res.json(await service.approveLoan(req.params.id)); } catch (e) { next(e); } }
 };
-
 module.exports = loanController;

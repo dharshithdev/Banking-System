@@ -1,12 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const customerController = require('../controllers/customerController');
-
-router.get('/', customerController.getAll);
-router.get('/:id', customerController.getById);
-router.post('/', customerController.create);
-router.put('/:id', customerController.update);
-
-// DELETE missing
-
+const controller = require('../controllers/customerController');
+const v = require('../middleware/validate');
+router.get('/', v.pagination, controller.getAll);
+router.get('/:id', v.objectId('id'), controller.getById);
+router.post('/', v.customer, controller.create);
+router.put('/:id', v.objectId('id'), v.customer, controller.update);
+router.delete('/:id', v.objectId('id'), controller.remove);
 module.exports = router;
