@@ -25,3 +25,4 @@ Thumbs.db
 # Misc
 coverage/
 graphify-out/
+.mongodb-data/

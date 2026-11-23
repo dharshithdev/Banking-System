@@ -1,4 +1,6 @@
 require('dotenv').config();
+const { validateEnv } = require('./config/env');
+try { validateEnv(); } catch (error) { console.error(`Startup configuration error: ${error.message}`); process.exit(1); }
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
@@ -11,6 +13,7 @@ const { authenticate, authorizeRole } = require('./middleware/auth');
 const { sanitize } = require('./middleware/validate');
 const rateLimit = require('./middleware/rateLimit');
 const errorHandler = require('./middleware/errorHandler');
+const cookieParser = require('./middleware/cookies');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,8 +24,9 @@ app.use((req, res, next) => {
   if (process.env.NODE_ENV === 'production' && req.secure) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   next();
 });
-app.use(cors({ origin: allowedOrigins, credentials: false }));
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json({ limit: '10kb' }));
+app.use(cookieParser);
 app.use(sanitize);
 app.use('/api', rateLimit({ windowMs: 60000, max: 120 }));
 app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }));

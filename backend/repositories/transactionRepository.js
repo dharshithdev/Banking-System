@@ -19,14 +19,15 @@ const transactionRepository = {
     );
   },
 
-  async create(transactionData) {
-    const tx = await Transaction.create({
+  async create(transactionData, session = null) {
+    const data = {
       accountId: transactionData.accountId,
       type: transactionData.type,
       amount: transactionData.amount,
       description: transactionData.description,
       balanceAfter: transactionData.balanceAfter
-    });
+    };
+    const tx = session ? (await Transaction.create([data], { session }))[0] : await Transaction.create(data);
     return serialize(tx.toObject());
   }
 };

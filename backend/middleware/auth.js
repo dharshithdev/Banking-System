@@ -1,34 +1,60 @@
 const crypto = require('crypto');
+const { promisify } = require('util');
+const userRepository = require('../repositories/userRepository');
 const { AppError } = require('./errorHandler');
-const DEFAULT_EMAIL = 'manager@example.com';
-const DEFAULT_PASSWORD = 'ChangeMe-Local-Only-2026!';
+const scrypt = promisify(crypto.scrypt);
+const COOKIE_NAME = 'bank_manager_token';
 
-function getSecret() {
-  const secret = process.env.JWT_SECRET;
-  if (process.env.NODE_ENV === 'production' && (!secret || secret.length < 32)) throw new AppError('Authentication is not configured', 500);
-  return secret || 'local-development-secret-change-before-production';
-}
+function encode(value) { return Buffer.from(JSON.stringify(value)).toString('base64url'); }
 function signToken(claims) {
-  const head = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const now = Math.floor(Date.now() / 1000);
-  const body = Buffer.from(JSON.stringify({ ...claims, iat: now, exp: now + 8 * 60 * 60 })).toString('base64url');
+  const head = encode({ alg: 'HS256', typ: 'JWT' });
+  const body = encode({ ...claims, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 });
   const input = `${head}.${body}`;
-  const sig = crypto.createHmac('sha256', getSecret()).update(input).digest('base64url');
-  return `${input}.${sig}`;
+  const signature = crypto.createHmac('sha256', process.env.JWT_SECRET).update(input).digest('base64url');
+  return `${input}.${signature}`;
 }
-function authenticate(req, res, next) {
-  const match = /^Bearer ([\w-]+\.[\w-]+\.[\w-]+)$/.exec(req.get('authorization') || '');
-  if (!match) return next(new AppError('Authentication required', 401));
+function verifyToken(token) {
+  const parts = String(token).split('.');
+  if (parts.length !== 3) throw new Error('Invalid token');
+  const [head, body, signature] = parts;
+  const header = JSON.parse(Buffer.from(head, 'base64url').toString());
+  if (header.alg !== 'HS256' || header.typ !== 'JWT') throw new Error('Invalid token header');
+  const expected = crypto.createHmac('sha256', process.env.JWT_SECRET).update(`${head}.${body}`).digest();
+  const actual = Buffer.from(signature, 'base64url');
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) throw new Error('Invalid token signature');
+  const claims = JSON.parse(Buffer.from(body, 'base64url').toString());
+  if (!Number.isFinite(claims.exp) || claims.exp <= Date.now() / 1000) throw new Error('Token expired');
+  return claims;
+}
+async function hashPassword(password) {
+  const salt = crypto.randomBytes(16);
+  const derived = await scrypt(password, salt, 64);
+  return `scrypt$${salt.toString('base64url')}$${derived.toString('base64url')}`;
+}
+async function verifyPassword(password, encoded) {
+  const [scheme, saltText, hashText] = String(encoded || '').split('$');
+  if (scheme !== 'scrypt' || !saltText || !hashText) return false;
+  const expected = Buffer.from(hashText, 'base64url');
+  const actual = await scrypt(password, Buffer.from(saltText, 'base64url'), expected.length);
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+function setAuthCookie(res, token) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600${secure}`);
+}
+function clearAuthCookie(res) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${COOKIE_NAME}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`);
+}
+async function authenticate(req, res, next) {
+  const bearer = /^Bearer\s+([\w-]+\.[\w-]+\.[\w-]+)$/i.exec(req.get('authorization') || '');
+  const token = req.cookies?.[COOKIE_NAME] || bearer?.[1];
+  if (!token) return next(new AppError('Authentication required', 401));
   try {
-    const [head, body, signature] = match[1].split('.');
-    const header = JSON.parse(Buffer.from(head, 'base64url').toString());
-    if (header.alg !== 'HS256' || header.typ !== 'JWT') throw new Error('Invalid token header');
-    const expected = crypto.createHmac('sha256', getSecret()).update(`${head}.${body}`).digest();
-    const actual = Buffer.from(signature, 'base64url');
-    if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) throw new Error('Invalid token signature');
-    const claims = JSON.parse(Buffer.from(body, 'base64url').toString());
-    if (!Number.isFinite(claims.exp) || claims.exp <= Date.now() / 1000) throw new Error('Token expired');
-    req.user = claims;
+    const claims = verifyToken(token);
+    const user = await userRepository.findById(claims.sub);
+    if (!user || user.tokenVersion !== claims.tokenVersion || user.role !== claims.role) throw new Error('Session revoked');
+    req.user = { id: String(user._id), email: user.email, role: user.role, tokenVersion: user.tokenVersion };
     next();
   } catch {
     next(new AppError('Invalid or expired token', 401));
@@ -37,14 +63,4 @@ function authenticate(req, res, next) {
 function authorizeRole(role) {
   return (req, res, next) => req.user?.role === role ? next() : next(new AppError('Insufficient permissions', 403));
 }
-function login(req, res, next) {
-  const email = Buffer.from(String(req.body?.email || ''));
-  const password = Buffer.from(String(req.body?.password || ''));
-  const safeEqual = (a, b) => a.length === b.length && crypto.timingSafeEqual(a, b);
-  if (!safeEqual(email, Buffer.from((process.env.MANAGER_EMAIL || DEFAULT_EMAIL).trim().toLowerCase())) ||
-      !safeEqual(password, Buffer.from(process.env.MANAGER_PASSWORD || DEFAULT_PASSWORD))) {
-    return next(new AppError('Invalid email or password', 401));
-  }
-  try { res.json({ token: signToken({ role: 'manager' }) }); } catch (err) { next(err); }
-}
-module.exports = { authenticate, authorizeRole, login };
+module.exports = { authenticate, authorizeRole, signToken, hashPassword, verifyPassword, setAuthCookie, clearAuthCookie, COOKIE_NAME };

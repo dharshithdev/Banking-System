@@ -7,6 +7,8 @@ const Account = require('./models/Account');
 const Loan = require('./models/Loan');
 const Transaction = require('./models/Transaction');
 const Counter = require('./models/Counter');
+const userRepository = require('./repositories/userRepository');
+const { hashPassword } = require('./middleware/auth');
 
 const customers = [
   { name: 'Rahul Sharma', email: 'rahul.sharma@email.com', phone: '9876543210', address: '12 MG Road, Bangalore, Karnataka', createdAt: '2024-01-15T10:00:00Z' },
@@ -47,6 +49,10 @@ const transactions = [
 
 async function seed() {
   await connectDB();
+  const managerEmail = String(process.env.SEED_MANAGER_EMAIL || '').trim().toLowerCase();
+  const managerPassword = process.env.SEED_MANAGER_PASSWORD;
+  if (!managerEmail || !managerPassword || managerPassword.length < 12) throw new Error('SEED_MANAGER_EMAIL and SEED_MANAGER_PASSWORD (at least 12 characters) are required.');
+  await userRepository.upsertManager({ name: process.env.SEED_MANAGER_NAME || 'Bank Manager', email: managerEmail, passwordHash: await hashPassword(managerPassword) });
 
   await Promise.all([
     Customer.deleteMany({}),
