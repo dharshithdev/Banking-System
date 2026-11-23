@@ -66,7 +66,7 @@ cp .env.example .env   # if .env does not exist
 npm run dev            # http://localhost:5173
 ```
 
-Set `SEED_MANAGER_EMAIL` and `SEED_MANAGER_PASSWORD` in `backend/.env`, then run `npm run seed` to create or update the initial manager account. The seed password must be at least 12 characters. Set `JWT_SECRET` to a unique random value of at least 32 characters before starting the server; startup rejects the example placeholder in every environment.
+Set `SEED_MANAGER_EMAIL` and `SEED_MANAGER_PASSWORD` in `backend/.env`, then run `npm run seed` to create or update the initial manager account. The seed password must be at least 12 characters. Set `JWT_SECRET` to a unique random value of at least 32 characters before starting the server; startup rejects the example placeholder in every environment. Email 2FA is enabled by default, so configure the SMTP settings below before starting the backend.
 
 ## Configuration
 
@@ -82,6 +82,12 @@ Set `SEED_MANAGER_EMAIL` and `SEED_MANAGER_PASSWORD` in `backend/.env`, then run
 | `SEED_MANAGER_EMAIL` | Set locally | Initial manager login email, stored lowercase |
 | `SEED_MANAGER_PASSWORD` | Set locally | Initial manager password, hashed during seeding |
 | `JWT_SECRET` | Rejected placeholder in `.env.example` | Unique HMAC signing secret of at least 32 characters |
+| `EMAIL_2FA_ENABLED` | `true` | Enables email OTP verification during manager sign-in; SMTP settings are required when enabled |
+| `SMTP_HOST` | Set locally | SMTP server hostname |
+| `SMTP_PORT` | `587` in example | SMTP server port; port 465 uses TLS |
+| `SMTP_USER` | Set locally | SMTP authentication username |
+| `SMTP_PASS` | Set locally | SMTP authentication password |
+| `SMTP_FROM` | Set locally | Sender name and email address |
 
 ### Frontend: `frontend/.env`
 
@@ -94,10 +100,11 @@ Set `SEED_MANAGER_EMAIL` and `SEED_MANAGER_PASSWORD` in `backend/.env`, then run
 
 Base URL: `http://localhost:3000/api`.
 
-`POST /api/auth/login` accepts `{ "email": "…", "password": "…" }`, sets an HttpOnly SameSite=Strict cookie, and returns `{ "user": { "id", "name", "email", "role" } }`. The frontend sends credentialed requests using that cookie. `POST /api/auth/logout` revokes the session and clears the cookie. API clients may also send `Authorization: Bearer <token>`. Login is rate limited; banking routes require the manager role.
+Manager sign-in uses two steps. `POST /api/auth/login` accepts `{ "email": "…", "password": "…" }`, verifies the scrypt password, emails a cryptographically random six-digit OTP, and returns `{ "requiresOtp": true, "email", "message" }`. It does not issue a session cookie yet. OTP hashes are salted SHA-256 values stored in MongoDB with a five-minute expiration and a five-attempt limit. `POST /api/auth/verify-otp` accepts `{ "email", "otp" }`; successful verification clears the challenge, records a `LOGIN_2FA_VERIFIED` audit entry, and sets the existing one-hour HttpOnly SameSite=Strict JWT cookie. `POST /api/auth/resend-otp` can resend a code for an active challenge. Login, verification, and resend endpoints are rate limited. The frontend sends credentialed requests using the cookie. `POST /api/auth/logout` revokes the session and clears the cookie. API clients may also send `Authorization: Bearer <token>`. Banking routes require the manager role.
 
 | Resource | Routes |
 | --- | --- |
+| Authentication | `POST /auth/login`, `POST /auth/verify-otp`, `POST /auth/resend-otp`, `POST /auth/logout`, `GET /auth/me` |
 | Customers | `GET /customers`, `GET /customers/:id`, `POST /customers`, `PUT /customers/:id`, `DELETE /customers/:id` |
 | Accounts | `GET /accounts`, `GET /accounts/:id`, `GET /accounts/customer/:customerId`, `POST /accounts`, `POST /accounts/:id/deposit`, `POST /accounts/:id/withdraw` |
 | Loans | `GET /loans`, `GET /loans/:id`, `GET /loans/customer/:customerId`, `POST /loans`, `POST /loans/:id/approve` |
@@ -107,4 +114,4 @@ List endpoints accept `page` and `limit` query parameters. Account amounts must 
 
 ## Security Notes
 
-The application uses standard security headers, a 10 KB JSON request limit, restrictive CORS, in-memory API and login rate limits, ObjectId and payload validation, NoSQL operator-key rejection, and centralized error handling. See [SECURITY_AUDIT.md](SECURITY_AUDIT.md) for remaining production recommendations, including MongoDB transactions for balance-plus-ledger writes and exact decimal currency representation.
+The application uses standard security headers, a 10 KB JSON request limit, restrictive CORS, in-memory API and authentication rate limits, ObjectId and payload validation, NoSQL operator-key rejection, and centralized error handling. See [SECURITY_AUDIT.md](SECURITY_AUDIT.md) for security implementation and verification notes.

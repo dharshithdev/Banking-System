@@ -34,7 +34,8 @@ export default function App() {
 function LoginScreen({ onLogin }) {
   const [form, setForm] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState({}); const [touched, setTouched] = useState({});
-  const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(''); const [notice, setNotice] = useState(''); const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState('credentials'); const [otp, setOtp] = useState('');
   const submitting = useRef(false);
   function update(field) {
     return (event) => {
@@ -53,20 +54,43 @@ function LoginScreen({ onLogin }) {
     const firstInvalid = Object.keys(nextErrors)[0];
     if (firstInvalid) { document.getElementById(`login-${firstInvalid}`)?.focus(); return; }
     if (submitting.current) return;
-    submitting.current = true; setError(''); setBusy(true);
-    try { onLogin((await authApi.login(normalizeEmail(form.email), form.password)).user); }
+    submitting.current = true; setError(''); setNotice(''); setBusy(true);
+    try {
+      const result = await authApi.login(normalizeEmail(form.email), form.password);
+      if (result.requiresOtp) { setStep('otp'); setOtp(''); setNotice(`A 6-digit verification code was sent to ${result.email}.`); }
+      else onLogin(result.user);
+    }
     catch (err) { setError(err.message); }
     finally { submitting.current = false; setBusy(false); }
   }
+  async function verify(event) {
+    event.preventDefault(); setError(''); setNotice('');
+    if (!/^\d{6}$/.test(otp)) { setError('Enter the 6-digit verification code.'); return; }
+    setBusy(true);
+    try { onLogin((await authApi.verifyLoginOtp(normalizeEmail(form.email), otp)).user); }
+    catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  }
+  async function resend() {
+    setError(''); setNotice(''); setBusy(true);
+    try { const result = await authApi.resendLoginOtp(normalizeEmail(form.email)); setNotice(result.message); }
+    catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  }
+  function backToSignIn() { setStep('credentials'); setOtp(''); setError(''); setNotice(''); }
   return <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-    <form noValidate onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white p-8 shadow-lg">
+    <form noValidate onSubmit={step === 'credentials' ? submit : verify} className="w-full max-w-md rounded-2xl bg-white p-8 shadow-lg">
       <p className="text-sm font-semibold uppercase tracking-widest text-navy-700">Bank Manager</p>
-      <h1 className="mt-2 text-2xl font-bold text-slate-900">Sign in</h1>
-      <p className="mt-2 text-sm text-slate-500">Use your manager credentials to continue.</p>
-      <div className="mt-6"><Field label="Email" id="login-email" error={errors.email}><Input autoComplete="username" type="email" inputMode="email" value={form.email} onChange={update('email')} onBlur={blur('email')} /></Field></div>
-      <div className="mt-4"><Field label="Password" id="login-password" error={errors.password}><Input autoComplete="current-password" type="password" value={form.password} onChange={update('password')} onBlur={blur('password')} /></Field></div>
+      <h1 className="mt-2 text-2xl font-bold text-slate-900">{step === 'credentials' ? 'Sign in' : '2FA Verification'}</h1>
+      <p className="mt-2 text-sm text-slate-500">{step === 'credentials' ? 'Use your manager credentials to continue.' : `Enter the 6-digit code sent to ${normalizeEmail(form.email)}.`}</p>
+      {step === 'credentials' ? <>
+        <div className="mt-6"><Field label="Email ID" id="login-email" error={errors.email}><Input autoComplete="username" type="email" inputMode="email" value={form.email} onChange={update('email')} onBlur={blur('email')} /></Field></div>
+        <div className="mt-4"><Field label="Password" id="login-password" error={errors.password}><Input autoComplete="current-password" type="password" value={form.password} onChange={update('password')} onBlur={blur('password')} /></Field></div>
+      </> : <div className="mt-6"><Field label="6-digit verification code" id="login-otp" error={/^\d{6}$/.test(otp) || !otp ? '' : 'Enter 6 digits'}><Input autoComplete="one-time-code" inputMode="numeric" type="text" maxLength={6} value={otp} onChange={(event) => { setOtp(event.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }} /></Field></div>}
+      {notice && <p role="status" className="mt-4 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">{notice}</p>}
       {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      <button disabled={busy} className="mt-6 w-full rounded-lg bg-navy-800 px-4 py-2.5 font-semibold text-white disabled:opacity-60">{busy ? 'Signing in…' : 'Sign in'}</button>
+      <button disabled={busy} className="mt-6 w-full rounded-lg bg-navy-800 px-4 py-2.5 font-semibold text-white disabled:opacity-60">{busy ? (step === 'credentials' ? 'Signing in…' : 'Verifying…') : (step === 'credentials' ? 'Sign in' : 'Verify & Sign In')}</button>
+      {step === 'otp' && <div className="mt-4 flex items-center justify-between text-sm"><button type="button" disabled={busy} onClick={resend} className="font-semibold text-navy-700 hover:underline">Resend Code</button><button type="button" disabled={busy} onClick={backToSignIn} className="text-slate-600 hover:underline">Back to Sign In</button></div>}
     </form>
   </main>;
 }

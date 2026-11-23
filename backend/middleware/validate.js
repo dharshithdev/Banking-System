@@ -66,5 +66,18 @@ function login(req, res, next) {
   req.body.email = email.trim().toLowerCase();
   next();
 }
+function verifyOtp(req, res, next) {
+  const { email, otp } = req.body || {};
+  if (typeof email !== 'string' || email.trim().length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return next(new AppError('Enter a valid email address', 400));
+  if (typeof otp !== 'string' || !/^\d{6}$/.test(otp)) return next(new AppError('Verification code must contain exactly 6 digits', 400));
+  req.body.email = email.trim().toLowerCase();
+  next();
+}
+function resendOtp(req, res, next) {
+  const { email } = req.body || {};
+  if (typeof email !== 'string' || email.trim().length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return next(new AppError('Enter a valid email address', 400));
+  req.body.email = email.trim().toLowerCase();
+  next();
+}
 function hasTwoDecimals(value) { return Math.abs(value * 100 - Math.round(value * 100)) < 1e-7; }
-module.exports = { sanitize, objectId, pagination, customer, account, amount, loan, login };
+module.exports = { sanitize, objectId, pagination, customer, account, amount, loan, login, verifyOtp, resendOtp };
