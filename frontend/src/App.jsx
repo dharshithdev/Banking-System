@@ -10,14 +10,17 @@ import { Field, Input } from './components/Field';
 import { normalizeEmail, validateLoginField } from './utils/validation';
 
 export default function App() {
-  const [token, setToken] = useState(() => localStorage.getItem('bank-manager-token'));
+  const [user, setUser] = useState(null);
+  const [checking, setChecking] = useState(true);
   useEffect(() => {
-    const clear = () => setToken(null);
+    const clear = () => { setUser(null); setChecking(false); };
     window.addEventListener('bank-manager-unauthorized', clear);
+    authApi.me().then((result) => setUser(result.user)).catch(() => setUser(null)).finally(() => setChecking(false));
     return () => window.removeEventListener('bank-manager-unauthorized', clear);
   }, []);
-  if (!token) return <LoginScreen onLogin={(value) => { localStorage.setItem('bank-manager-token', value); setToken(value); }} />;
-  const logout = () => { localStorage.removeItem('bank-manager-token'); setToken(null); };
+  if (checking) return <main className="flex min-h-screen items-center justify-center text-slate-500">Loading…</main>;
+  if (!user) return <LoginScreen onLogin={setUser} />;
+  const logout = async () => { try { await authApi.logout(); } finally { setUser(null); } };
   return <Routes><Route element={<Layout onLogout={logout} />}>
     <Route index element={<Navigate to="/customers" replace />} />
     <Route path="/customers" element={<CustomersPage />} />
@@ -51,7 +54,7 @@ function LoginScreen({ onLogin }) {
     if (firstInvalid) { document.getElementById(`login-${firstInvalid}`)?.focus(); return; }
     if (submitting.current) return;
     submitting.current = true; setError(''); setBusy(true);
-    try { onLogin((await authApi.login(normalizeEmail(form.email), form.password)).token); }
+    try { onLogin((await authApi.login(normalizeEmail(form.email), form.password)).user); }
     catch (err) { setError(err.message); }
     finally { submitting.current = false; setBusy(false); }
   }

@@ -66,7 +66,7 @@ cp .env.example .env   # if .env does not exist
 npm run dev            # http://localhost:5173
 ```
 
-Sign in with the manager credentials from `backend/.env`. Local development defaults are `manager@example.com` and `ChangeMe-Local-Only-2026!`; replace them outside local development.
+Set `SEED_MANAGER_EMAIL` and `SEED_MANAGER_PASSWORD` in `backend/.env`, then run `npm run seed` to create or update the initial manager account. The seed password must be at least 12 characters. Set `JWT_SECRET` to a unique random value of at least 32 characters before starting the server; startup rejects the example placeholder in every environment.
 
 ## Configuration
 
@@ -78,9 +78,10 @@ Sign in with the manager credentials from `backend/.env`. Local development defa
 | `NODE_ENV` | `development` | Runtime environment |
 | `MONGODB_URI` | `mongodb://127.0.0.1:27017/banking_system` | MongoDB connection |
 | `CORS_ORIGIN` | `http://localhost:5173` | Comma-separated frontend origin allowlist |
-| `MANAGER_EMAIL` | `manager@example.com` | Manager login email |
-| `MANAGER_PASSWORD` | `ChangeMe-Local-Only-2026!` | Manager login password |
-| `JWT_SECRET` | Local placeholder in `.env.example` | HMAC signing secret; use a unique random value of at least 32 characters in production |
+| `SEED_MANAGER_NAME` | `Bank Manager` | Initial manager display name |
+| `SEED_MANAGER_EMAIL` | Set locally | Initial manager login email, stored lowercase |
+| `SEED_MANAGER_PASSWORD` | Set locally | Initial manager password, hashed during seeding |
+| `JWT_SECRET` | Rejected placeholder in `.env.example` | Unique HMAC signing secret of at least 32 characters |
 
 ### Frontend: `frontend/.env`
 
@@ -93,7 +94,7 @@ Sign in with the manager credentials from `backend/.env`. Local development defa
 
 Base URL: `http://localhost:3000/api`.
 
-`POST /api/auth/login` accepts `{ "email": "…", "password": "…" }` and returns `{ "token": "…" }`. Send `Authorization: Bearer <token>` with all `/api/customers`, `/api/accounts`, `/api/loans`, and `/api/transactions` requests. Login is rate limited; banking routes require the manager role.
+`POST /api/auth/login` accepts `{ "email": "…", "password": "…" }`, sets an HttpOnly SameSite=Strict cookie, and returns `{ "user": { "id", "name", "email", "role" } }`. The frontend sends credentialed requests using that cookie. `POST /api/auth/logout` revokes the session and clears the cookie. API clients may also send `Authorization: Bearer <token>`. Login is rate limited; banking routes require the manager role.
 
 | Resource | Routes |
 | --- | --- |

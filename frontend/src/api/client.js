@@ -11,11 +11,9 @@ function buildQuery(params) {
 export async function request(path, { method = 'GET', body, params } = {}) {
   let response;
   try {
-    const token = localStorage.getItem('bank-manager-token');
     const headers = {};
     if (body !== undefined) headers['Content-Type'] = 'application/json';
-    if (token && path !== '/auth/login') headers.Authorization = `Bearer ${token}`;
-    response = await fetch(`${BASE_URL}${path}${buildQuery(params)}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    response = await fetch(`${BASE_URL}${path}${buildQuery(params)}`, { method, headers, credentials: 'include', body: body !== undefined ? JSON.stringify(body) : undefined });
   } catch {
     throw new ApiError('Unable to reach the server. Please check your connection.', 0);
   }
@@ -24,11 +22,14 @@ export async function request(path, { method = 'GET', body, params } = {}) {
   if (text) { try { data = JSON.parse(text); } catch { data = null; } }
   if (!response.ok) {
     if (response.status === 401 && path !== '/auth/login') {
-      localStorage.removeItem('bank-manager-token');
       window.dispatchEvent(new CustomEvent('bank-manager-unauthorized'));
     }
     throw new ApiError(data?.error || `Request failed (${response.status})`, response.status);
   }
   return data;
 }
-export const authApi = { login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }) };
+export const authApi = {
+  login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
+  me: () => request('/auth/me'),
+  logout: () => request('/auth/logout', { method: 'POST' })
+};

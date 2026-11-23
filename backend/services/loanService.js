@@ -2,6 +2,7 @@ const loanRepository = require('../repositories/loanRepository');
 const customerRepository = require('../repositories/customerRepository');
 const accountRepository = require('../repositories/accountRepository');
 const { AppError } = require('../middleware/errorHandler');
+const auditRepository = require('../repositories/auditRepository');
 const loanService = {
   async getAllLoans(query) { return loanRepository.findAll(query); },
   async getLoanById(id) { const loan = await loanRepository.findById(id); if (!loan) throw new AppError('Loan not found', 404); return loan; },
@@ -15,7 +16,7 @@ const loanService = {
     }
     return loanRepository.create(data);
   },
-  async approveLoan(id) {
+  async approveLoan(id, actor) {
     const loan = await loanRepository.findById(id);
     if (!loan) throw new AppError('Loan not found', 404);
     const P = loan.principal, annualRate = loan.annualInterestRate ?? loan.interestRate, n = loan.tenureMonths;
@@ -24,7 +25,10 @@ const loanService = {
     const factor = Math.pow(1 + r, n);
     const emi = Math.round((r === 0 ? P / n : P * r * factor / (factor - 1)) * 100) / 100;
     const approved = await loanRepository.approvePending(id, emi);
-    if (approved) return approved;
+    if (approved) {
+      if (actor) await auditRepository.create({ ...actor, action: 'approve', resourceType: 'loan', resourceId: id, details: { loanNumber: approved.loanNumber, emi: approved.emi } });
+      return approved;
+    }
     if (!await loanRepository.findById(id)) throw new AppError('Loan not found', 404);
     throw new AppError('Only pending loans can be approved', 409);
   }
