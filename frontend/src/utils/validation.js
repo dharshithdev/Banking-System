@@ -127,6 +127,21 @@ export function validateLoginField(field, value) {
   return '';
 }
 
+export function validateResetOtp(value) {
+  if (!String(value ?? '')) return 'Reset code is required.';
+  return /^\d{6}$/.test(String(value)) ? '' : 'Enter the 6-digit reset code.';
+}
+
+export function validatePasswordStrength(value) {
+  const password = String(value ?? '');
+  if (!password) return 'New password is required.';
+  if (password.length < 8) return 'Use at least 8 characters.';
+  if (!/[A-Z]/.test(password)) return 'Add at least one uppercase letter.';
+  if (!/[a-z]/.test(password)) return 'Add at least one lowercase letter.';
+  if (!/[\d\W]/.test(password)) return 'Add at least one number or special character.';
+  return '';
+}
+
 export function calculateEmi(principal, annualRate, tenureMonths) {
   if (!Number.isFinite(principal) || principal <= 0 || !Number.isFinite(annualRate) || annualRate < 0 || !Number.isInteger(tenureMonths) || tenureMonths < 1) return null;
   const monthlyRate = annualRate / 12 / 100;

@@ -23,6 +23,16 @@ module.exports = {
     try { res.json(await service.resendLoginOtp(req.body.email)); }
     catch (error) { next(error); }
   },
+  async forgotPassword(req, res, next) {
+    try { res.status(200).json(await service.requestPasswordReset(req.body.email)); } catch (error) { next(error); }
+  },
+  async resetPassword(req, res, next) {
+    try {
+      const result = await service.resetPassword(req.body.email, req.body.otp, req.body.newPassword);
+      clearAuthCookie(res);
+      res.status(200).json(result);
+    } catch (error) { next(error); }
+  },
   async logout(req, res, next) {
     try {
       if (req.user?.id) await service.logout(req.user.id);

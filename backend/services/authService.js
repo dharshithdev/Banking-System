@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const userRepository = require('../repositories/userRepository');
 const { AppError } = require('../middleware/errorHandler');
-const { signToken, verifyPassword } = require('../middleware/auth');
+const { signToken, verifyPassword, hashPassword } = require('../middleware/auth');
 const mailer = require('../utils/mailer');
 const auditRepository = require('../repositories/auditRepository');
 
@@ -85,6 +85,51 @@ const authService = {
     const user = await userRepository.findByEmail(email);
     if (user?.otpHash && user.otpExpiresAt > new Date() && (user.otpAttempts ?? 0) < 5) await sendChallenge(user);
     return { message: 'If an active sign-in challenge exists, a new code has been sent.' };
+  },
+  async requestPasswordReset(email) {
+    const generic = { message: 'If an account exists for that email, a password reset code has been sent.' };
+    const user = await userRepository.findByEmail(email);
+    if (!user) return generic;
+    const otp = String(crypto.randomInt(100000, 1000000));
+    await userRepository.saveResetOtpChallenge(user._id, {
+      resetOtpHash: createOtpHash(otp),
+      resetOtpExpiresAt: new Date(Date.now() + OTP_TTL_MS)
+    });
+    const smtpConfigured = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'].every((key) => typeof process.env[key] === 'string' && process.env[key].trim());
+    if (String(process.env.EMAIL_2FA_ENABLED ?? 'true').trim().toLowerCase() === 'false' && !smtpConfigured) {
+      console.info(`Password reset code generated for ${user.email}; SMTP is not configured.`);
+      return generic;
+    }
+    try {
+      await mailer.sendPasswordResetOtpEmail({ to: user.email, name: user.name, otp });
+    } catch (error) {
+      await userRepository.clearResetOtpChallenge(user._id);
+      console.error('Unable to send password reset email:', error.message);
+    }
+    return generic;
+  },
+  async resetPassword(email, otp, newPassword) {
+    const user = await userRepository.findByEmail(email);
+    const now = new Date();
+    if (!user || !user.resetOtpHash || !user.resetOtpExpiresAt || user.resetOtpExpiresAt <= now || user.resetOtpAttempts >= 5) {
+      throw new AppError('Invalid or expired password reset code', 401);
+    }
+    if (!verifyOtpHash(otp, user.resetOtpHash)) {
+      await userRepository.incrementResetOtpAttempts(user._id);
+      throw new AppError('Invalid or expired password reset code', 401);
+    }
+    const passwordHash = await hashPassword(newPassword);
+    const updated = await userRepository.updatePasswordAndRevokeSessions(user._id, passwordHash, user.resetOtpHash, now);
+    if (!updated) throw new AppError('Invalid or expired password reset code', 401);
+    await auditRepository.create({
+      actorId: user._id,
+      actorEmail: user.email,
+      action: 'PASSWORD_RESET',
+      resourceType: 'user',
+      resourceId: String(user._id),
+      details: { method: 'email_otp' }
+    });
+    return { message: 'Password reset successful. Please sign in with your new password.' };
   },
   async logout(userId) {
     const user = await userRepository.incrementTokenVersion(userId);
