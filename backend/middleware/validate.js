@@ -66,5 +66,37 @@ function login(req, res, next) {
   req.body.email = email.trim().toLowerCase();
   next();
 }
+function verifyOtp(req, res, next) {
+  const { email, otp } = req.body || {};
+  if (typeof email !== 'string' || email.trim().length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return next(new AppError('Enter a valid email address', 400));
+  if (typeof otp !== 'string' || !/^\d{6}$/.test(otp)) return next(new AppError('Verification code must contain exactly 6 digits', 400));
+  req.body.email = email.trim().toLowerCase();
+  next();
+}
+function resendOtp(req, res, next) {
+  const { email } = req.body || {};
+  if (typeof email !== 'string' || email.trim().length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return next(new AppError('Enter a valid email address', 400));
+  req.body.email = email.trim().toLowerCase();
+  next();
+}
+function normalizedEmail(value) {
+  return typeof value === 'string' && value.trim().length <= 120 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+function validateForgotPassword(req, res, next) {
+  const { email } = req.body || {};
+  if (!normalizedEmail(email)) return next(new AppError('Enter a valid email address', 400));
+  req.body.email = email.trim().toLowerCase();
+  next();
+}
+function validateResetPassword(req, res, next) {
+  const { email, otp, newPassword } = req.body || {};
+  if (!normalizedEmail(email)) return next(new AppError('Enter a valid email address', 400));
+  if (typeof otp !== 'string' || !/^\d{6}$/.test(otp)) return next(new AppError('Reset code must contain exactly 6 digits', 400));
+  if (typeof newPassword !== 'string' || newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[\d\W]/.test(newPassword)) {
+    return next(new AppError('Password must be at least 8 characters and include uppercase, lowercase, and a number or special character', 400));
+  }
+  req.body.email = email.trim().toLowerCase();
+  next();
+}
 function hasTwoDecimals(value) { return Math.abs(value * 100 - Math.round(value * 100)) < 1e-7; }
-module.exports = { sanitize, objectId, pagination, customer, account, amount, loan, login };
+module.exports = { sanitize, objectId, pagination, customer, account, amount, loan, login, verifyOtp, resendOtp, validateForgotPassword, validateResetPassword };
